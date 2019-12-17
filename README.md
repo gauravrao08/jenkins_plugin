@@ -13,3 +13,8 @@ Glassfish 3.x remote deployment
 Role-based Authorization Strategy
 Enables user authorization using a Role-Based strategy. Roles can be defined globally or for particular jobs or nodes selected by regular expressions.
 ```
+3. this plugin is used to configure docker with jenkins
+```
+Publish Over SSH
+Send build artifacts over SSH
+```

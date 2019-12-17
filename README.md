@@ -6,3 +6,10 @@
 Deploy to container
 This plugin allows you to deploy a war to a container after a successful build.
 Glassfish 3.x remote deployment
+```
+2. This plugin is used to give access on jenkins to used on one particular job or project.
+
+```
+Role-based Authorization Strategy
+Enables user authorization using a Role-Based strategy. Roles can be defined globally or for particular jobs or nodes selected by regular expressions.
+```

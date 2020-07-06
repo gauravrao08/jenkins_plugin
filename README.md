@@ -18,3 +18,13 @@ Enables user authorization using a Role-Based strategy. Roles can be defined glo
 Publish Over SSH
 Send build artifacts over SSH
 ```
+
+4. Credentials Binding Plugin
+```
+Credentials Binding Plugin
+
+this plugin is used to save access key and password or secet text and password
+
+jenskins Jon ==> Build Environment ==> Use secret text(s) or file(s)
+```
+

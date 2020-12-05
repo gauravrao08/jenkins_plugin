@@ -1,0 +1,26 @@
+rsync -azv data deployer@192.168.1.9:/home/deployer/gaadi/shared/  ==> copy data folder in destination
+
+
+rsync -azv data/ deployer@192.168.1.9:/home/deployer/gaadi/shared/ ==> copy content of data folder in destination
+
+
+copy:
+	src: /home/ansible/data   				==> copy data folder in destination
+	dest: /home/deployer/gaadi/prod/current/
+
+copy:
+	src: /home/ansible/data/    				==> content of data folder in destination
+	dest: /home/deployer/gaadi/prod/current/
+
+# use synchronize because it is faster than copy
+
+   synchronize:
+      src: /var/jenkins_home/workspace/Test/
+      dest: "/home/deployer/gaadi-project/stage/release/{{ number }}"
+
+#to copy data from s3 to server
+aws s3 cp s3://copy-data-userdata/install.yaml /home/ec2-user/
+
+
+#to increase CPU load on server
+for i in 1 2 3 4; do while : ; do : ; done & done

@@ -1,0 +1,45 @@
+pipeline{
+    agent any
+    environment{
+        IP='192.168.72.36'
+    }
+    stages{
+        stage('git checkout'){
+            steps{
+                git branch: 'master', credentialsId: 'jenkins-private-key', url: 'git@bitbucket.org:girnarsoftware/girnarsoft-ggn-devops.git'
+
+            }
+        }
+        stage('copy'){
+            steps{
+                sshagent(['jenkins-private-key']){
+                    sh """
+                    ssh deployer@$IP "mkdir -p /home/deployer/${JOB_NAME}/${choice}/shared"
+                    ssh deployer@$IP "mkdir -p /home/deployer/${JOB_NAME}/${choice}/release/${BUILD_NUMBER}"
+                   rsync -avz * deployer@$IP:/home/deployer/${JOB_NAME}/${choice}/release/${BUILD_NUMBER}
+                   #ssh deployer@$IP "unlink /home/deployer/${JOB_NAME}/${choice}/current"
+                   ssh deployer@$IP "ln -s /home/deployer/${JOB_NAME}/${choice}/release/${BUILD_NUMBER} /home/deployer/${JOB_NAME}/${choice}/current"
+                    """
+                }
+
+            }
+        }
+        stage('build-id'){
+            steps{
+                script{
+                def lastSuccessfulBuildID = 0
+                def build = currentBuild.previousBuild
+                while (build != null) {
+                  if (build.result == "SUCCESS")
+                  {
+                    lastSuccessfulBuildID = build.id as Integer
+                    break
+                  }
+                  build = build.previousBuild
+                }
+                println lastSuccessfulBuildID
+                }
+            }
+       }
+    }
+}

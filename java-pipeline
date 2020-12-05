@@ -1,0 +1,40 @@
+pipeline{
+    agent any
+    parameters{
+      booleanParam(name: "YES")
+    }
+    environment{
+        IP='ip'
+        }
+    stages{
+        stage('git checkout'){
+            steps{
+                git branch: 'staging', credentialsId: 'c2a24a5f', url: 'git@bitbucket.org:gauravrao/test.git'
+            }
+        }
+        stage('maven clean install'){
+            steps{
+                script{
+                    def git = "$compile"
+                    if (git == "yes"){
+                        println("compile yes!!, mvn clean install")
+                        sh 'mvn -f recon-build/pom.xml clean install'
+                    }
+                    else{
+                        println("compile NO")
+                    }
+                }
+            }
+        }
+        stage('copy jar/war artifact'){
+              when { expression { params.YES } }
+              steps{
+                  sshagent(['c2a24a5f']) {
+                    sh """
+                          ssh deployer@$IP "mkdir -p /home/deployer/test2"
+                    """
+                  }
+              }
+        }
+    }
+}

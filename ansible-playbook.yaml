@@ -1,0 +1,23 @@
+---
+- hosts: deploy
+  #vars:
+  # number
+  tasks:
+  - name: make directory
+    file:
+      path: "/home/deployer/gaadi-project/stage/release/{{ number }}"
+      state: directory
+      mode: '0755'
+  - name: copy code to server
+    synchronize:
+      src: /var/jenkins_home/workspace/Test/
+      dest: "/home/deployer/gaadi-project/stage/release/{{ number }}"  
+  - name: symlink of data
+    file:
+      src: "/home/deployer/gaadi-project/stage/release/{{ number }}"
+      dest: /home/deployer/gaadi-project/stage/current
+      owner: deployer
+      group: deployer
+      state: link
+      force: yes
+

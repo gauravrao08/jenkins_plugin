@@ -1,0 +1,29 @@
+pipeline{
+    agent any
+    environment{
+        IP='192.168.1.8'
+    }
+    stages{
+        stage('git checkout'){
+            steps{
+                git branch: 'new-branch', credentialsId: 'c19d7b6d', url: 'git@bitbucket.org:gauravsonu/test-git.git'
+            
+            }
+        }
+        stage('copy'){
+            steps{
+                sshagent(['ad9b86b0']) {
+                     
+                     sh """
+                   ssh deployer@$IP "mkdir -p /home/deployer/${JOB_NAME}/${choice}/shared"
+                   ssh deployer@$IP "mkdir -p /home/deployer/${JOB_NAME}/${choice}/release/${BUILD_NUMBER}"
+                   rsync -avz * deployer@$IP:/home/deployer/${JOB_NAME}/${choice}/release/${BUILD_NUMBER}
+                   ssh deployer@$IP "unlink /home/deployer/${JOB_NAME}/${choice}/current"
+                   ssh deployer@$IP "ln -s /home/deployer/${JOB_NAME}/${choice}/release/${BUILD_NUMBER} /home/deployer/${JOB_NAME}/${choice}/current"                          
+                     """
+                }
+                
+            }
+        }
+    }
+}

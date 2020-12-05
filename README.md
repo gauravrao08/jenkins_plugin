@@ -27,4 +27,10 @@ this plugin is used to save access key and password or secet text and password
 
 jenskins Jon ==> Build Environment ==> Use secret text(s) or file(s)
 ```
+5. SSH Agent
+```
+plugin name : SSH Agent
+
+this plugin is used for pipeline to SSH the server with save credentials i.e. "sshagent"
+```
 

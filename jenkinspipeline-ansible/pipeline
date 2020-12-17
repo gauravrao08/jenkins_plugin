@@ -1,0 +1,21 @@
+pipeline{
+    agent any
+    stages{
+        stage('git checkout'){
+            steps{
+                git branch: 'master', credentialsId: 'jenkins-private-key', url: 'git@bitbucket.org:gauravrao/ggn-devops.git'
+            
+            }
+        }
+        stage('Stage in parallel'){
+            steps{
+                script{
+                    
+                    ansiblePlaybook credentialsId: 'jenkins-private-key', disableHostKeyChecking: true, installation: 'ansible', inventory: 'ip.txt', playbook: 'ansible.yaml', extraVars: [number: BUILD_NUMBER, job_name: JOB_NAME, envv: envirment]
+                    
+                }
+            }
+            
+        }
+    }
+}

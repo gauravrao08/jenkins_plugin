@@ -1,0 +1,33 @@
+---
+- hosts: deploy
+  tasks:
+  - name: make release
+    file:
+      path: "/home/deployer/{{ job_name }}/{{ envv }}/release/"
+      state: directory
+      mode: '0755'
+  - name: make shared
+    file:
+      path: "/home/deployer/{{ job_name }}/{{ envv }}/shared/"
+      state: directory
+      mode: '0755'
+  - name: copy data
+    copy:
+      src: /var/lib/jenkins/workspace/{{ job_name }}/
+      dest: /home/deployer/{{ job_name }}/{{ envv }}/release/{{ number }}
+  - name: symlink to release
+    file:
+      src: "/home/deployer/{{ job_name }}/{{ envv }}/release/{{ number }}"
+      dest: /home/deployer/{{ job_name }}/{{ envv }}/current
+      owner: deployer
+      group: deployer
+      state: link
+      force: yes
+  - name: symlink to shared folder
+    file:
+      src: "/home/deployer/{{ job_name }}/{{ envv }}/shared/node"
+      dest: /home/deployer/{{ job_name }}/{{ envv }}/release/{{ number }}/node
+      owner: deployer
+      group: deployer
+      state: link
+      force: yes

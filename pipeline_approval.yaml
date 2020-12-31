@@ -1,0 +1,23 @@
+pipeline{
+    agent any
+    stages{
+        stage('approval for stage'){
+            steps{
+                timeout(time: 30, unit: 'SECONDS') {
+                    script {
+                        def answer = input message: 'approve',
+                        parameters: [booleanParam(defaultValue: true,
+                        description: 'Prerelease setting', name: 'prerelease')]
+                    }        
+                }
+            }
+        }
+        stage('git clone'){
+            steps{
+                git branch: 'master', credentialsId: 'jenkins-private-key', url: 'git@bitbucket.org:gauravrao/-ggn-devops.git'
+
+            }
+            
+        }
+    }
+}

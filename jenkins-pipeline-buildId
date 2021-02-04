@@ -42,4 +42,28 @@ pipeline{
             }
        }
     }
+      post{
+        success{
+        sshagent(['c2a24a5f']){
+          sh """
+              ssh deployer@$IP "cd /home/deployer/${JOB_NAME}/${envv}/release && ls -t1 /home/deployer/${JOB_NAME}/${envv}/release | tail -n +4 | xargs rm -r "      
+          """
+        }    
+        
+        }     
+        failure{   
+                sshagent(['c2a24a5f']){
+                  sh """
+                      ssh deployer@$IP "rm -rf /home/deployer/${JOB_NAME}/${envv}/release/${BUILD_NUMBER} "      
+                  """
+                }    
+        }
+        unstable {       
+                  sshagent(['c2a24a5f']){
+                  sh """
+                      ssh deployer@$IP "rm -rf /home/deployer/${JOB_NAME}/${envv}/release/${BUILD_NUMBER} "  
+                  """
+                  }    
+          }
+    }
 }

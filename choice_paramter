@@ -1,0 +1,27 @@
+#create choice paramater in jenkins with option yes and no
+
+pipeline{
+    agent any
+    stages{
+        stage('git clone'){
+            steps{
+                git branch: '$branch', credentialsId: 'c2a24a5f', url: 'git@bitbucket.org:gauravrao/repo-name.git'
+
+            }
+        }
+        stage('sonar test'){
+          steps{
+            script{
+                def test = "$sonar"
+                if (test == "yes"){
+                    println("compile yes!!, sonar run")
+                    sh 'npm install'
+                    sh 'npm run sonar'
+                    }
+                else{
+                    println("compile NO")
+                  }
+            }
+          }
+        }
+}

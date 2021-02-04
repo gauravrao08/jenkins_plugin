@@ -1,0 +1,27 @@
+pipeline{
+    agent any
+    parameters {
+      booleanParam(name: 'SONAR', defaultValue: false, description: 'Do you want to run the SONAR test?')
+    }
+    stages{
+        stage('git clone'){
+            steps{
+                git branch: '$branch', credentialsId: 'c2a24a5f-', url: 'git@bitbucket.org:gauravrao/repo-name.git'
+
+            }
+        }
+        stage('sonar test'){
+          steps{
+            script{
+                if (params.SONAR){
+                    println("compile yes!!, sonar run")
+                    sh 'npm install'
+                    sh 'npm run sonar'
+                    }
+                else{
+                    println("compile NO")
+                  }
+            }
+          }
+        }
+}

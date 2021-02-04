@@ -633,12 +633,12 @@ pipeline{
 		}
 		//Only runs if the current Pipeline’s or stage’s run has a "failed" status
 		failure { 
-            echo 'post->failure is called'
-        }
+            		echo 'post->failure is called'
+        	}
 		//Runs regardless of the completion status of the Pipeline’s or stage’s run.
-        always { 
-            echo 'post->always is called'
-        }
+        	always { 
+            		echo 'post->always is called'
+        	}
     }
 }
 

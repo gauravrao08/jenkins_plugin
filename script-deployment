@@ -1,0 +1,61 @@
+#!/bin/bash
+
+no_of_instance=$(aws autoscaling describe-auto-scaling-instances --region ap-south-1 --output text --query "AutoScalingInstances[?AutoScalingGroupName=='connx-ASG'].InstanceId")
+
+if  [[ -z $no_of_instance ]]
+then
+      echo "zero instance in  autosacling group"
+      exit 0
+fi
+
+
+
+
+ip_list=$(aws autoscaling describe-auto-scaling-instances --region ap-south-1 --output text --query "AutoScalingInstances[?AutoScalingGroupName=='auto-scaling-group-name'].InstanceId" | xargs -n1 aws ec2 describe-instances --instance-ids $ID --region ap-south-1 --query "Reservations[].Instances[].PrivateIpAddress" --output text)
+parameter=$1
+expect="module"
+
+if  [ $#  == 1 ] ;
+then
+     echo  " "
+     echo "INFO:  Node module will install during  this release "
+     echo  " "
+      if [ "$parameter" !=  "$expect" ] ;
+        then
+           echo  " "
+           echo "INFO: Kindly enter the correct parameter as name $expect"
+           echo  " "
+           exit 1
+     fi
+fi
+
+status_check(){
+
+if test $1 -eq 0 ; then
+                        echo ""
+                        echo "INFO:  $2  has been done "
+                        echo ""
+        else
+                        echo ""
+                        echo "ERROR: $2  has been  fail "
+                        echo ""
+                        exit 1;
+fi
+
+}
+
+for ip  in $ip_list
+	do
+         rsync -Pav -e "ssh -i $HOME/.ssh/deploy.pem" /home/source/deploy/production/* ubuntu@$ip:/home/ubuntu/destination/prod/production/ 
+         status_check $? CODE_SYNC
+
+        if [ "$parameter"  == "$expect" ] ; 
+        then
+          ssh -i $HOME/.ssh/deploy.pem ubuntu@$ip " cd /home/ubuntu/destination/prod/production && npm install "
+
+        fi
+          ssh -i $HOME/.ssh/deploy.pem ubuntu@$ip " cd /home/ubuntu/destination/prod/production && pm2 reload "pm2-name'"
+          status_check $? PM2_RELOAD
+          ssh -i $HOME/.ssh/deploy.pem ubuntu@$ip "pm2 list"
+	done
+

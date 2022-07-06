@@ -1,0 +1,61 @@
+#!groovy
+
+pipeline {
+    agent any
+    triggers {
+        githubPush()
+    }
+    stages {
+        stage('Deploy demo-app-linux to dev'){
+            when {
+                allOf {
+                    changeset pattern: "demo-app-linux/*", caseSensitive: true;
+                    branch 'master'
+                }
+            }
+            steps{
+                script{
+                    build job: '../demo-app-linux',
+                    parameters:
+                    [
+                        string(name: 'ENV', value: 'dev'),
+                        string(name: 'FLAVOR', value: 'default'),
+                        string(name: 'TERRAFORM_COMMAND', value: 'skip'),
+                        string(name: 'ANSIBLE_COMMAND', value: 'skip'),
+                        string(name: 'ANSIBLE_PLAYBOOK', value: ''),
+                        string(name: 'ANSIBLE_EXTRA_ARGS', value: ''),
+                        string(name: 'TERRAFORM_EXTRA_ARGS', value: ''),
+                        string(name: 'TERRAFORM_OVERRIDE', value: ''),
+                        string(name: 'USER_VAR', value: ''),
+                        string(name: 'VERSION', value: ''),
+                        booleanParam(name: 'ANSIBLE_WAIT', value: true)
+                    ]
+                }
+            }
+        }
+        stage('Deploy app1 to dev'){
+            when {
+                allOf {
+                    changeset pattern: "app1/*", caseSensitive: true
+                    branch 'app1-develop'
+                }
+            }
+            steps{
+                script{
+                    build job: '../app1',
+                    parameters: [
+                        string(name: 'ENV', value: 'dev'),
+                        string(name: 'TERRAFORM_COMMAND', value: 'skip'),
+                        string(name: 'ANSIBLE_COMMAND', value: 'skip'),
+                        string(name: 'ANSIBLE_EXTRA_ARGS', value: '-vv'),
+                        string(name: 'TERRAFORM_EXTRA_ARGS', value: '-var \'foo=bar\''),
+                        booleanParam(name: 'ANSIBLE_WAIT', value: true)
+                        ],
+                    quietPeriod: 10,
+                    propagate: false,
+                    wait: false
+                }
+            }
+        }
+    }
+}

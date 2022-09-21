@@ -1,0 +1,136 @@
+#!/usr/bin/groovy
+
+
+/*--------------------------------------------------------------------------*/
+/*        Job handles managing of infrastructure with terraform             */
+/*           Job is called from a multi-branch pipeline job.                */
+/*--------------------------------------------------------------------------*/
+
+def AGENT_LABEL = null
+
+/* def modules = [
+    "google-cloud-functions" : "https://github.com/Test/99999_US_EWSSRE_ARCHIVE_terraform-google-function_EWS_VS",
+    "google-spanner" : "https://github.com/Test/99999_US_EWSSRE_ARCHIVE_terraform-google-spanner_EWS_VS",
+    "google-iam" : "https://github.com/Test/99999_US_EWSSRE_ARCHIVE_terraform-google-iam_EWS_VS",
+    "google-cloud-storage" : "https://github.com/Test/99999_US_EWSSRE_ARCHIVE_terraform-google-cloud-storage_EWS_VS",
+    "google-pubsub" : "https://github.com/Test/99999_US_EWSSRE_ARCHIVE_terraform-google-pubsub_EWS_VS"
+] */
+
+properties([
+    parameters(
+    [choice(choices: ['dev', 'qa', 'load' ,'uat', 'prd', 'local'], description: 'please select target environment', name: 'ENV_NAME')]
+    )
+])
+
+node('master') {
+    stage('Set agent'){
+        if (params.ENV_NAME == 'dev' || params.ENV_NAME == 'load' || params.ENV_NAME == 'qa' || params.ENV_NAME == 'local') {
+            AGENT_LABEL = "tf-ews-es-platform-npe"
+        } else if (params.ENV_NAME == 'uat' ||  params.ENV_NAME == 'prd') {
+            AGENT_LABEL = "tf-ews-es-pfm-prd"
+        }
+        currentBuild.displayName = "${params.ENV_NAME}"
+        currentBuild.description = "Applying changes to the ${params.ENV_NAME} environment"
+
+        githubAppCredentialId = getGitHubAppCredentialId()
+    }
+}
+
+pipeline {
+
+    agent {label "${AGENT_LABEL}"}
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '50', artifactNumToKeepStr: '50'))
+    }
+    stages {
+        stage('Download Terraform Binary'){
+            environment {
+                TF_VERSION = sh(script: 'grep required_version versions.tf  | sed -nre "s/^[^0-9]*(([0-9]+\\.)*[0-9]+).*/\\1/p"', , returnStdout: true).trim()
+            }
+            steps {
+                sh 'wget --quiet https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip && unzip terraform_${TF_VERSION}_linux_amd64.zip'
+                sh './terraform version --no-color'
+            }
+        }
+        stage('Terraform Plan') {
+            steps {
+                container("jnlp") {
+                    script {
+                            modules.each { entry -> checkoutRepo( entry.value, "${env.workspace}/../modules/${entry.key}" , githubAppCredentialId ) }
+                            sh './terraform init -backend-config=env_vars/`echo $NODE_LABELS | awk \'{print $1}\' | cut -d \'-\' -f1 --complement`.tfbackend -no-color'
+                            sh 'if [ -n `./terraform workspace list -no-color | grep $ENV_NAME`]; then ./terraform workspace new $ENV_NAME -no-color; else ./terraform workspace select $ENV_NAME -no-color; fi'
+                            sh './terraform plan --var-file=env_vars/$ENV_NAME.tfvars -no-color -out=tf.plan'
+                    }
+                }
+            }
+        }
+        stage('Changes Approval'){
+           when {
+   		    anyOf {
+	  	    allOf {
+		    branch "develop"
+		    expression{params.ENV_NAME=="dev" || params.ENV_NAME == "qa"}
+		}
+		    branch pattern: "release.*", comparator: "REGEXP"
+		}
+		}
+            steps {
+                input 'Deploy stack?'
+            }
+        }
+        stage('Terraform Apply') {
+           when {
+   		    anyOf {
+	  	    allOf {
+		    branch "develop"
+		    expression{params.ENV_NAME=="dev" || params.ENV_NAME == "qa"}
+		}
+		    branch pattern: "release.*", comparator: "REGEXP"
+		}
+		}
+            steps {
+                container("jnlp") {
+                    script {
+                            sh './terraform apply -no-color tf.plan'
+                    }
+                }
+            }
+        }
+    }
+
+/*--------------------------------------------------------------------*/
+/*        Cleanup - delete workspace, email victims if job fails      */
+/*--------------------------------------------------------------------*/
+
+    post {
+        failure {
+            mail to: 'gaurav.yadav@test.com', subject: "${env.JOB_NAME} failed", body: "Check the URL below for more info\n\n${env.BUILD_URL}"
+        }
+        unstable{
+            mail to: 'gaurav.yadav@test.com', subject: "${env.JOB_NAME} failed", body: "Check the URL below for more info\n\n${env.BUILD_URL}"
+        }
+    }
+}
+
+
+/*--------------------------------------------------------------------*/
+/*                  Get GitHub credentials function                   */
+/*--------------------------------------------------------------------*/
+String getGitHubAppCredentialId () {
+    githubAppCredentialId = scm.getUserRemoteConfigs()[0].getCredentialsId()
+    echo "Got githubAppCredentialId from scm: ${githubAppCredentialId}"
+    return githubAppCredentialId
+}
+
+
+/*--------------------------------------------------------------------*/
+/*                  Checkout GitHub repository                        */
+/*--------------------------------------------------------------------*/
+def checkoutRepo ( String repoUrl, String workingdirectory , String ghCreds ) {
+    dir (workingdirectory){
+        checkout changelog: false, poll: false, scm: [$class: 'GitSCM',
+                                                        branches: [[name: "master" ]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'LocalBranch']],
+                                                        submoduleCfg: [], userRemoteConfigs: [[credentialsId: ghCreds , name: 'origin',
+                                                                                            url: repoUrl ]]]
+    }
+}

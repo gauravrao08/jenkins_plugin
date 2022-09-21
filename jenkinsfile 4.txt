@@ -1,0 +1,102 @@
+properties([
+  parameters([
+    [$class: 'StringParameterDefinition',
+      name: 'JENKINS_LABEL_WITH_M2_MOUNT',
+      description: 'Label with .m2 mount',
+      defaultValue: 'build-pod
+	  '
+    ],
+    [$class: 'StringParameterDefinition',
+      name: 'CONTAINER_WITH_M2_MOUNT',
+      description: 'Label with .m2 mount',
+      defaultValue: 'mvn3jdk8'
+    ],
+    [$class: 'StringParameterDefinition',
+      name: 'AGE',
+      description: 'How many days of artifacts to keep?',
+      defaultValue: '15'
+    ],
+    [$class: 'BooleanParameterDefinition',
+      name: 'AUTO_APPROVE',
+      description: "Auto approve .m2 cleaning",
+      defaultValue: true
+    ],
+    ])
+])
+pipeline {
+    environment {
+        OLDFILES="/tmp/deleted_artifacts.txt"
+        AGE="15"
+    }
+    agent {
+        label "${JENKINS_LABEL_WITH_M2_MOUNT}"
+    }  
+    stages {
+        stage('.m2 Cleaner') {
+            steps {
+                script {
+                    container("${CONTAINER_WITH_M2_MOUNT}") {
+                      sh '''#!/bin/bash
+                          rm -rf $OLDFILES || true
+                          MOUNT_HOME="$(echo -n $(bash -c "cd ~`eval whoami` && pwd"))"
+                          M2_REPO="${MOUNT_HOME}/.m2"
+                          
+                          echo -e "\n\n\nSpace before: "
+                          df -H ${MOUNT_HOME}/.m2
+                          echo -e "\n"
+  
+                          echo "==== Checking Snapshots older than $AGE days ===="
+                          find "${M2_REPO}" -name "*-SNAPSHOT" -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+  
+                          echo "==== Checking Jars ===="
+                          find "${M2_REPO}" -name '*-SNAPSHOT*jar' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+                          find "${M2_REPO}" -name '*.jar' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+  
+                          echo "==== Checking Wars/Ears ===="
+                          find "${M2_REPO}" -name '*-SNAPSHOT*war' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+                          find "${M2_REPO}" -name '*-SNAPSHOT*ear' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+  
+                          echo "==== Checking APKs ===="
+                          find "${M2_REPO}" -name '*-SNAPSHOT*apk' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+                          find "${M2_REPO}" -name '*-SNAPSHOT*apksources' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+                          find "${M2_REPO}" -name '*-SNAPSHOT*apklib' -atime +${AGE} -exec dirname {} \\; >> ${OLDFILES}
+  
+                          echo -e "\n\nFinal list before deletion: "
+                          cat $OLDFILES
+                          echo -e "\n\n"
+                      '''
+  
+                      if ("${params.AUTO_APPROVE}" == 'false') {
+                          input message: "Proceed with deletion?"
+                      }
+                      else {
+                          echo "Autoapproved. Proceeding with deletion."
+                      }
+                      
+                      sh '''#!/bin/bash
+                          for x in `cat ${OLDFILES}`; do echo "DELETED: $x" && rm -rf "$x"; done
+                          
+                          MOUNT_HOME="$(echo -n $(bash -c "cd ~`eval whoami` && pwd"))"
+                          echo -e "\n\nSpace after: "
+                          df -H ${MOUNT_HOME}/.m2
+                      '''
+                    }
+                }
+            }
+        }
+    }
+    post {
+          success {
+              echo 'Success!! :)'
+          }
+          unstable {
+              echo 'I am unstable :/'
+          }
+          failure {
+              echo 'I failed :('
+          }
+          cleanup {
+              deleteDir()
+        }
+    }
+}

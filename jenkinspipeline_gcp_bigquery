@@ -1,11 +1,11 @@
-```
-restore backup of bigquery into the dataset
-```
+################################################
+#restore backup of bigquery into the dataset
+#################################################
 
 def I9_BACKUP_FOLDER
 def TASK_MANAGEMENT_API_BACKUP_FOLDER
 def EMPLOYER_CONFIGURATION_BACKUP_FOLDER
-def EMAIL_ON_FAILURE = "Jean-Michel.Hanquet@equifax.com"
+def EMAIL_ON_FAILURE = "Jean-Michel.Hanquet@XXXXXXXXX.com"
 
 pipeline {
     parameters {

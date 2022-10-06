@@ -1,0 +1,297 @@
+```
+restore backup of bigquery into the dataset
+```
+
+def I9_BACKUP_FOLDER
+def TASK_MANAGEMENT_API_BACKUP_FOLDER
+def EMPLOYER_CONFIGURATION_BACKUP_FOLDER
+def EMAIL_ON_FAILURE = "Jean-Michel.Hanquet@equifax.com"
+
+pipeline {
+    parameters {
+        booleanParam(name: "runI9FirestoreImports", defaultValue: true)
+        booleanParam(name: "runPortalFirestoreImports", defaultValue: true)
+        booleanParam(name: "runPortalSpannerImports", defaultValue: true)
+    }
+    agent {
+        label "prod-deploy-pod"
+    }
+    stages {
+        stage("Find backup folders") {
+            steps {
+                script {          
+                    try {       
+                        echo "Finding some backup folders."     
+                        I9_BACKUP_FOLDER="`gsutil ls -l gs://XXXXXX/prod/ | tail -n 1`all_namespaces"
+                        TASK_MANAGEMENT_API_BACKUP_FOLDER="`gsutil ls -d gs://XXXXXXXXXX/spanner/backup/es-platform-services-prd/task-management-api-prd/es-platform-services-prd-task-management-api-prd* | tail -n 1`"
+                        EMPLOYER_CONFIGURATION_BACKUP_FOLDER="`gsutil ls -d gs://XXXXXXX/firestore/backup/employer-configuration-api-prd* | tail -n 1`all_namespaces" 
+                        ESPORTAL_COMMON_BACKUP_FOLDER="`gsutil ls -d gs://XXXXXX/firestore/backup/esportal-common-api-prd* | tail -n 1`all_namespaces"
+                        EVERIFY_EMPLOYER_CONFIG_BACKUP_FOLDER="`gsutil ls -d gs://XXXXXXX/firestore/backup/everify-employer-config-api-prd* | tail -n 1`all_namespaces"
+                        I9_EMPLOYER_CONFIG_BACKUP_FOLDER="`gsutil ls -d gs://XXXXXXX/firestore/backup/i9-employer-config-api-prd* | tail -n 1`all_namespaces"
+                        echo "Latest i9 backup folder: ${I9_BACKUP_folder}."
+                    }
+                    catch (Exception ee) {
+                        echo "An exception occured while finding backup folders. Message: " + ee.getMessage()
+                    }
+                }
+            }
+        }                                                                                                                                                        
+        stage("BQ Imports Parallel") {
+            parallel {
+                stage("task-api-prd-tasks") {  
+                    when {
+                        environment name: "runPortalSpannerImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=AVRO --replace dataset.task-api-prd-tasks ${TASK_MANAGEMENT_API_BACKUP_FOLDER}TASK.avro-00000-of-00001"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("task-api-prd-task-types") {  
+                    when {
+                        environment name: "runPortalSpannerImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=AVRO --replace dataset.task-api-prd-task-types ${TASK_MANAGEMENT_API_BACKUP_FOLDER}TASK_TYPE.avro-00000-of-00001"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("task-api-prd-task-groups") {  
+                    when {
+                        environment name: "runPortalSpannerImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=AVRO --replace dataset.task-api-prd-task-groups ${TASK_MANAGEMENT_API_BACKUP_FOLDER}TASK_GROUP.avro-00000-of-00001"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("task-api-prd-families") {  
+                    when {
+                        environment name: "runPortalSpannerImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=AVRO --replace dataset.task-api-prd-families ${TASK_MANAGEMENT_API_BACKUP_FOLDER}TASK_FAMILY.avro-00000-of-00001"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("employer-person-api-prd-employee-facts") {  
+                    when {
+                        environment name: "runPortalSpannerImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            String employer_person_backup_folder="`gsutil ls -d gs://backups-ews-es-pfm-prd-5aaa-prd/spanner/backup/es-platform-services-prd/employer-person-api-prd/es-platform-services-prd-employer-person-api-prd* | tail -n 1`"
+                            sh "bq load --project_id=XXXXXXXX --source_format=AVRO --replace dataset.employer-person-api-prd-employee-facts ${employer_person_backup_folder}employee_fact.avro-00000-of-00001"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("packet-api-prd-packet_instance") {  
+                    when {
+                        environment name: "runPortalSpannerImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            String packet_api_backup_folder="`gsutil ls -d gs://backups-ews-es-pfm-prd-5aaa-prd/spanner/backup/es-platform-services-prd/packet-api-prd/es-platform-services-prd-packet-api-prd* | tail -n 1`"
+                            sh "bq load --project_id=XXXXXXXX --source_format=AVRO --replace dataset.packet-api-prd-packet_instance ${packet_api_backup_folder}packet_instance.avro-00000-of-00001"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("i9-form-prod-forms") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.i9-form-prod-forms ${I9_BACKUP_FOLDER}/kind_i9-form-prod-forms/all_namespaces_kind_i9-form-prod-forms.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("i9-form-prod-forms-history") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.i9-form-prod-forms-history ${I9_BACKUP_FOLDER}/kind_i9-form-prod-forms-history/all_namespaces_kind_i9-form-prod-forms-history.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("i9-Partner-prod-appointments") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.i9-Partner-prod-appointments ${I9_BACKUP_FOLDER}/kind_i9-Partner-prod-appointments/all_namespaces_kind_i9-Partner-prod-appointments.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("i9-Partner-prod-events") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.i9-Partner-prod-events ${I9_BACKUP_FOLDER}/kind_i9-Partner-prod-events/all_namespaces_kind_i9-Partner-prod-events.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("everify-prod-cases") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.everify-prod-cases ${I9_BACKUP_FOLDER}/kind_everify-prod-cases/all_namespaces_kind_everify-prod-cases.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("everify-prod-cases-history") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.everify-prod-cases-history ${I9_BACKUP_FOLDER}/kind_everify-prod-cases-history/all_namespaces_kind_everify-prod-cases-history.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("everify-validation-error-messages") {  
+                    when {
+                        environment name: "runI9FirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.everify-validation-error-messages ${I9_BACKUP_FOLDER}/kind_validationErrorMessages/all_namespaces_kind_validationErrorMessages.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("employer-configuration-employer_locations-prd") {  
+                    when {
+                        environment name: "runPortalFirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.employer-configuration-employer_locations-prd ${EMPLOYER_CONFIGURATION_BACKUP_FOLDER}/kind_employer-configuration-employer_locations-prd/all_namespaces_kind_employer-configuration-employer_locations-prd.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("employer-configuration-locations-prd") {  
+                    when {
+                        environment name: "runPortalFirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.employer-configuration-locations-prd ${EMPLOYER_CONFIGURATION_BACKUP_FOLDER}/kind_employer-configuration-locations-prd/all_namespaces_kind_employer-configuration-locations-prd.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }                                
+                stage("employer-configuration-employers-prd") {  
+                    when {
+                        environment name: "runPortalFirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.employer-configuration-employers-prd ${EMPLOYER_CONFIGURATION_BACKUP_FOLDER}/kind_employer-configuration-employers-prd/all_namespaces_kind_employer-configuration-employers-prd.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("esportal-common-feature-prd") {  
+                    when {
+                        environment name: "runPortalFirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.esportal-common-feature-prd ${ESPORTAL_COMMON_BACKUP_FOLDER}/kind_esportal-common-feature-prd/all_namespaces_kind_esportal-common-feature-prd.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("everify_details-everify-employer-config-prd") {  
+                    when {
+                        environment name: "runPortalFirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.everify_details-everify-employer-config-prd ${EVERIFY_EMPLOYER_CONFIG_BACKUP_FOLDER}/kind_everify_details-everify-employer-config-prd/all_namespaces_kind_everify_details-everify-employer-config-prd.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+                stage("i9_details-i9-employer-config-prd") {  
+                    when {
+                        environment name: "runPortalFirestoreImports", value: 'true'
+                    }
+                    steps {
+                        script {               
+                            echo "Starting import"
+                            sh "bq load --project_id=XXXXXXXX --source_format=DATASTORE_BACKUP --replace dataset.i9_details-i9-employer-config-prd ${I9_EMPLOYER_CONFIG_BACKUP_FOLDER}/kind_i9_details-i9-employer-config-prd/all_namespaces_kind_i9_details-i9-employer-config-prd.export_metadata"
+                            echo "Import complete"
+                        }
+                    }
+                }
+            }
+        }
+        stage("Add import log") {  
+                steps {
+                    script {               
+                        echo "Adding import log"
+                        def currentTimestamp = new Date()
+                        sh "echo '{\"isI9FirestoreImport\": ${runI9FirestoreImports}, \"isPortalFirestoreImport\": ${runPortalFirestoreImports}, \"isPortalSpannerImport\": ${runPortalSpannerImports}, \"importJobReference\": \"${BUILD_URL}\", \"importTimestamp\": \"${currentTimestamp.format("yyyy-MM-dd HH:mm:ss.SSS", TimeZone.getTimeZone('UTC'))}\" }' | bq insert --project_id=XXXXXXXX dataset.import-history"
+                        echo "Import log added"
+                    }
+                }
+            }
+    }
+    post {
+            always {
+                script {
+                    echo "Job complete"
+                    mail to: EMAIL_ON_FAILURE, subject: "Job ${env.JOB_NAME} complete", body: "Check the URL below for more info\n\n${env.BUILD_URL}"
+                    deleteDir()
+                }
+            }
+
+            failure {
+                mail to: EMAIL_ON_FAILURE, subject: "Job ${env.JOB_NAME} failed", body: "Check the URL below for more info\n\n${env.BUILD_URL}"
+            }
+        }
+}

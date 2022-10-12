@@ -1,0 +1,240 @@
+#!groovy
+
+SERVICE_NAME_CHOICE = 'nike-asset-handler\nnike-issuance\nnike-issuer-reporting\nnike-issuer-switch\nnike-trans-dashboard\nnike-transport-panel-web\ndispute-service\nnike-issuer-efkon-netc-engine\n'
+
+/******
+Difference between service and servicelivetest Jenkinsfile would be below lines in Deployment stage
+sh "sed -i 's/SERVICENAME/${serviceName}/g' ./kubernetes/deploy/${k8syamlName}"	in service Jenkinsfile
+sh "sed -i 's/SERVICENAME/${livetestserviceName}/g' ./kubernetes/deploy/${k8syamlName}"	in servicelivetest Jenkinsfile
+ws("${jenkinsHome}/workspace/DeploymentPipelineProd${serviceName}") {	in service Jenkinsfile
+ws("${jenkinsHome}/workspace/DeploymentPipelineProd${livetestserviceName}") {   in servicelivetest Jenkinsfile
+And "Delete Live-Test Deployment if it exists" stage would not be in servicelivetest Jenkinsfile
+******/
+
+def devopsUsers= ['username']
+def serviceUsers= ['username']
+//def k8syamlName = 'nike-asset-handler.yaml'
+def jenkinsHome = '/data/jenkins'
+
+node {
+
+  deleteDir()
+
+  def serviceName = 'None'
+  def livetestserviceName = 'None'
+  def image = 'None'
+  def replica = 0
+  def deploymentName = 'None'
+  def imageInput = 'None'
+  def dockerImage = 'None'
+
+
+  wrap([$class: 'BuildUser']) {
+
+    stage("Authenticate User") {
+      try {
+        searchUser(serviceUsers, devopsUsers, env.BUILD_USER_ID)
+        //serviceName = 'nike-asset-handler'
+        //livetestserviceName = 'nike-asset-handler-live-test'
+        replica = 1
+      } catch (exc) {
+        echo "Authentication Failed"
+        throw exc
+      }
+    } //stage_end
+
+    stage("select service name") {
+      script {
+      SERVICE_NAME = input message: 'Please select SERVICE NAME', ok: 'Next', parameters: [choice(name: 'SERVICE_NAME', choices: "${SERVICE_NAME_CHOICE}", description: 'Please select the SERVICE')]
+      }
+      if ( SERVICE_NAME == 'nike-asset-handler' ) {
+          serviceName = 'nike-asset-handler'
+          livetestserviceName = 'nike-asset-handler-live-test'
+          k8syamlName = 'nike-asset-handler.yaml'
+          NODEPORT_NEW = '31402'
+      } else if ( SERVICE_NAME == 'nike-issuance' ) {
+          serviceName = 'nike-issuance'
+          livetestserviceName = 'nike-issuance-live-test'
+          k8syamlName = 'nike-issuance.yaml'
+          NODEPORT_NEW = '31405'
+      } else if ( SERVICE_NAME == 'nike-issuer-reporting' ) {
+          serviceName = 'nike-issuer-reporting'
+          livetestserviceName = 'nike-issuer-reporting-live-test'
+          k8syamlName = 'nike-issuer-reporting.yaml'
+          NODEPORT_NEW = '31406'
+      } else if ( SERVICE_NAME == 'nike-issuer-switch' ) {
+          serviceName = 'nike-issuer-switch'
+          livetestserviceName = 'nike-issuer-switch-live-test'
+          k8syamlName = 'nike-issuer-switch.yaml'
+          NODEPORT_NEW = '31404'
+      } else if ( SERVICE_NAME == 'nike-trans-dashboard' ) {
+          serviceName = 'nike-trans-dashboard'
+          livetestserviceName = 'nike-trans-dashboard-live-test'
+          k8syamlName = 'nike-trans-dashboard.yaml'
+          NODEPORT_NEW = '31403'
+      } else if ( SERVICE_NAME == 'nike-transport-panel-web' ) {
+          serviceName = 'nike-transport-panel-web'
+          livetestserviceName = 'nike-transport-panel-web-live-test'
+          k8syamlName = 'nike-transport-panel-web.yaml' 
+          NODEPORT_NEW = '31407'   
+      } else if ( SERVICE_NAME == 'dispute-service' ) {
+          serviceName = 'dispute-service'
+          livetestserviceName = 'dispute-service-live-test'
+          k8syamlName = 'nike-dispute-service.yaml'  
+          NODEPORT_NEW = '31501'
+      } else if ( SERVICE_NAME == 'nike-issuer-efkon-netc-engine' ) {
+          serviceName = 'nike-issuer-efkon-netc-engine'
+          livetestserviceName = 'nike-issuer-efkon-netc-engine-live-test'
+          k8syamlName = 'nike-issuer-efkon-netc-engine.yaml'       
+      } else {
+        echo "SERVICE_NAME not set properly"
+        sh "exit 1"
+      }
+    }  //stage
+
+
+    stage("Production Deployment Stages") {
+      stage("Image Search") {
+        try {
+          imageInput = input(
+              id        : 'userInput',
+              message   : 'Enter docker image version to be promoted',
+              submitterParameter: 'submitter',
+              parameters: [[
+                  $class      : 'TextParameterDefinition',
+                  defaultValue: 'None',
+                  description : 'Docker Image',
+                  name        : 'image']])
+          searchUser(serviceUsers,devopsUsers,imageInput['submitter'])
+          image = searchDockerImage(serviceName, imageInput['image'])
+          echo "Image Found ${image}"
+        } catch (exc) {
+          echo "Image not found deployment failed"
+          throw exc
+        }
+      }
+
+
+      stage("Deployment") {
+        def userInput = input(
+            id        : 'userInputForDeployment',
+            message   : "Final Approval Before PRODUCTION DEPLOYMENT",
+            submitterParameter: 'submitter',
+            parameters: [[
+                $class      : 'BooleanParameterDefinition',
+                defaultValue: false,
+                description : "Image = dockerregistry-csm.pumapb.io/pumabank/${serviceName}:${imageInput['image']}\n Replica = ${replica} \n ",
+                name        : "FinalProdApproval"]])
+
+                searchUser(serviceUsers,devopsUsers,userInput['submitter'])
+        ws("${jenkinsHome}/workspace/DeploymentPipelineProd${livetestserviceName}") {
+          checkout([
+              $class           : 'GitSCM',
+              branches         : [[name: '*/master']],
+              userRemoteConfigs: [[
+                  url          : 'ssh://git@bitbucket.pumapb.io:7999/in/infrastructure-as-code.git',
+                  credentialsId: 'c4bc7440']]])
+
+          try {
+            echo "Running deployment on PRODUCTION."
+            if (searchYaml(k8syamlName)) {
+              sh "mkdir -p ./kubernetes/deploy"
+              sh "touch ./kubernetes/deploy/${k8syamlName}"
+              sh "cp ./kubernetes/nike_eks/${k8syamlName} ./kubernetes/deploy/"
+              sh "sed -i 's/iteenv/prodaws/g' ./kubernetes/deploy/${k8syamlName}"
+              sh "sed -i 's/SERVICENAME/${livetestserviceName}/g' ./kubernetes/deploy/${k8syamlName}"
+              sh "sed -i 's/^\\( *\\)test: manual\044/\\1\\storageClassName: manual/' ./kubernetes/deploy/${k8syamlName}"
+              sh "sed -i 's/NAMESPACE/default/g' ./kubernetes/deploy/${k8syamlName}"
+              sh "sed -i 's/NUMBER-OF-REPLICAS/1/g' ./kubernetes/deploy/${k8syamlName}"
+              sh "sed -i 's/extensions\\/v1beta1/apps\\/v1/g' ./kubernetes/deploy/${k8syamlName}"
+  	      if ( SERVICE_NAME != 'nike-issuer-efkon-netc-engine' ) {
+              	sh "sed -i 's/NODEPORT/${NODEPORT_NEW}/g' ./kubernetes/deploy/${k8syamlName}"
+	      }
+              def file = readYaml file: "./kubernetes/deploy/${k8syamlName}"
+              for (i=0;i<file.size();i++){
+
+                  if (file[i].get('kind') == 'Deployment'){
+                      deploymentName= file[i].metadata.name
+                      dockerImage = file[i].spec.template.spec.containers[0].image
+                  }
+              }
+              dockerImage = dockerImage.split(':')
+
+              sh "sed -i 's/${dockerImage[1]}/${imageInput['image']}/g' ./kubernetes/deploy/${k8syamlName}"
+              sh "sed -i 's/replicas: 1/replicas: ${replica}/g' ./kubernetes/deploy/${k8syamlName}"
+              sh "sudo /data/jenkins/kubectl/kubectl apply -f ./kubernetes/deploy/${k8syamlName} --kubeconfig=/root/kubeconfig/kubeconfig-nike-prod-aws"
+            }
+          } catch (exc) {
+            echo "Unable to deploy on PRODUCTION"
+            throw exc
+          }
+        }
+      }
+
+      stage("Rollout Status"){
+          try{
+            sh(script:'#!/bin/sh -e\n'+"sudo /data/jenkins/kubectl/kubectl rollout status deployment ${deploymentName} --kubeconfig='/root/kubeconfig/kubeconfig-nike-prod-aws'")
+            }
+          catch(exc){
+            echo "Rollout not yet complete/Rollout failed"
+          }
+      }
+
+      stage("Pod Details"){
+          def pod_details = sh(returnStdout: true,script:'#!/bin/sh -e\n'+"sudo /data/jenkins/kubectl/kubectl get pods -o wide --kubeconfig='/root/kubeconfig/kubeconfig-nike-prod-aws' |grep ${deploymentName} ")
+          echo "$pod_details"
+          pod_details = pod_details.split()
+          for(i=0;i<pod_details.size();i+=7){
+              if (pod_details[i+2] =='Running')
+              {
+                  def ip= sh(returnStdout: true,script:'#!/bin/sh -e\n'+"sudo /data/jenkins/kubectl/kubectl describe pod ${pod_details[i]} --kubeconfig='/root/kubeconfig/kubeconfig-nike-prod-aws'|grep -i node: | cut -d'/' -f2")
+                  def imageName= sh(returnStdout: true,script:'#!/bin/sh -e\n'+"sudo /data/jenkins/kubectl/kubectl describe pod ${pod_details[i]} --kubeconfig='/root/kubeconfig/kubeconfig-nike-prod-aws'|grep -i Image:|cut -d':' -f2,3").split()
+                  echo "${pod_details[i]} ip = ${ip} docker image= ${imageName} "
+		  break
+              }
+              else{
+                  echo "ip not availaible for ${pod_details[i]} since it is in ${pod_details[i+2]} state"
+	 	  break
+              }
+            }
+          }
+
+    }
+  }
+}
+
+def searchUser(service, devopsUsers, userName) {
+  users = devopsUsers + service
+  userExist = checkInList(users, userName)
+
+  if (userExist) {
+    echo "user authenticated"
+  } else {
+    error("User not allowed")
+  }
+}
+
+def checkInList(stdout, check) {
+  def b = stdout
+  def value = b.contains(check)
+  return value
+}
+
+def searchDockerImage(serviceName, imageInput) {
+  stdout = sh(script: "sudo docker pull dockerregistry-csm.pumapb.io/pumabank/${serviceName}:${imageInput}", returnStdout: true)
+  return stdout
+}
+
+def searchYaml(jobName) {
+  stdout = sh(script: 'ls ./kubernetes/nike_eks', returnStdout: true)
+  jobNameSearch = jobName
+  JobNameExist = checkInList(stdout, jobNameSearch)
+
+  if (JobNameExist) {
+    echo "using ${jobName}"
+    return true
+  } else {
+    error("${jobName} not found, Deployment failed")
+    return false
+  }
+}

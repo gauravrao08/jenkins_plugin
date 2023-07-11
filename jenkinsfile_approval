@@ -1,0 +1,94 @@
+node('ubuntu_terraform-1') {
+    def terraform_validate_only = {
+        sh """
+        pwd
+        cd central-dashboard-account-ct
+        terraform init -backend-config=$LIFECYCLE/backend.hcl
+        terraform validate
+        """
+    }
+
+    def terraform_plan_only = {
+        sh """
+        pwd
+        cd central-dashboard-account-ct
+        terraform init -backend-config=$LIFECYCLE/backend.hcl
+        terraform plan -var-file=$LIFECYCLE/$VARFILE
+        """
+    }
+
+    try {
+        stage("check out"){
+            checkout scm
+        }
+
+        stage('dev:check') {
+            withEnv(['LIFECYCLE=non-prod','VARFILE=npr.tfvars']) {
+                if (BRANCH_NAME.startsWith('feature/')) {
+                    withCredentials([
+                        string(credentialsId: 'DEV_AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'DEV_AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    ]) {
+                            stage('dev: terraform validate') {
+                                terraform_validate_only()
+                            }
+                            timeout(time: 2, unit: 'MINUTES') {
+                                // def APPROVE_PROD = input message: 'Deploy to dev', ok: 'Continue',
+                                //     parameters: [choice(name: 'APPROVE_PROD', choices: 'YES\nNO', description: 'Deploy to Dev ?')]
+                                // if ("$APPROVE_PROD" == 'YES') {
+                                 def userInput = input(id: 'Proceed1', message: 'Promote build?', parameters: [[$class: 'BooleanParameterDefinition', defaultValue: false, description: 'want to deploy in dev', name: 'Please confirm you agree with this']])
+                                    if(userInput == true) {
+                                        stage('dev: terraform plan') {
+                                            terraform_plan_only()
+                                    }
+                                } else {
+                                    echo "dev deployment is not approved."
+                                }
+                            }
+                        }
+                } else {
+                    echo "Please check your branch name"
+                }
+            }
+        }
+
+        stage('uat:check') {	
+            withEnv(['LIFECYCLE=preprod','VARFILE=preprod.tfvars']) {
+                if (BRANCH_NAME.equals('uat')) {
+                    withCredentials([
+                        string(credentialsId: 'PROD_AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'PROD_AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    ]) {
+                            stage('uat: terraform validate') {
+                                terraform_validate_only()
+                            }
+                        }   
+                } else {
+                    echo "Skip UAT"
+                }
+            }
+        }
+
+        stage('prod:check') {	
+            withEnv(['LIFECYCLE=prod','VARFILE=prod.tfvars']) {
+                if (BRANCH_NAME.equals('master')) {
+                    withCredentials([
+                        string(credentialsId: 'PROD_AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY_ID'),
+                        string(credentialsId: 'PROD_AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+                    ]) {
+                            stage('prod: terraform validate') {
+                                terraform_validate_only()
+                            }
+                        }   
+                } else {
+                    echo "Skip PROD"
+                }
+            }
+        }
+    } catch (Exception e) {
+            echo "Error retrieving branch name: ${e.getMessage()}"
+    }
+}
+
+
+
